@@ -4,7 +4,108 @@ from Evtx.Evtx import Evtx
 from Evtx.Views import evtx_file_xml_view
 from urllib.parse import urlparse
 class Forensic_tool:
+
+    # OSINT Domain Lists
+    Tracking_domains = {
+        "doubleclick.net",
+        "google-analytics.com",
+        "adservice.google.com",
+        "facebook.net",
+        "scorecardsearch.com",
+        "quantserve.com",
+        "ads.yahoo.com",
+        "adnxs.com",
+        "rubiconproject.com"
+    }
+
+    Malicious_domains = {
+        "evil-malware-site.biz",
+        "steal-session.ru",
+        "phish-login.cn",
+        "malicious-update.net",
+        "trojan-dropper.org"
+    }
+
+    Fingerprinting_domains = {
+        "fingerprintjs.com",
+        "browserleaks.com",
+        "deviceinfo.me"
+    }
+
+    Suspicious_Tlds = {
+        ".ru", ".cn", ".biz", ".info", ".top", ".xyz"
+    }
+
+
+
     #Build functions
+
+    def is_session_long_lived(self, expiry):
+        if not expiry:
+            return False 
+
+        try: #Convert to int
+            expiry = int(expiry)
+        except:
+            return False
+
+        sus_time = 13253760000000000
+
+        return expiry > sus_time
+
+    def is_session_cookie(self,name):
+        name = name.lower()
+        session_keywords =["session", "sid", "sessid", "phpsessid", "jsessionid", "auth", "token"]
+        return any(s in name for s in session_keywords)
+
+    
+    def normalize_cookie(self, cookie):
+        return {
+            "domain": cookie.get("domain") or cookie.get("host_key") or cookie.get("host") or "",
+            "name": cookie.get("name", ""),
+            "value": cookie.get("value") or cookie.get("encrypted_value") or "",
+            "path": cookie.get("path", "/"),
+
+            # Security flags
+            "secure": (
+                cookie.get("secure") or
+                cookie.get("isSecure") or
+                cookie.get("Secure") or
+                False
+            ),
+
+            "http_only": (
+                cookie.get("httpOnly") or
+                cookie.get("httponly") or
+                cookie.get("HttpOnly") or
+                False
+            ),
+
+            "same_site": (
+                cookie.get("sameSite") or
+                cookie.get("samesite") or
+                cookie.get("SameSite") or
+                "None"
+            ),
+
+            # Expiration
+            "expiry": (
+                cookie.get("expirationDate") or
+                cookie.get("expires_utc") or
+                cookie.get("expiry") or
+                None
+            ),
+
+            # Host-only flag
+            "host_only": (
+                cookie.get("hostOnly") or
+                cookie.get("host_only") or
+                cookie.get("HostOnly") or
+                True
+            )
+        }
+
+
     def analyze_cookies(self, cookie_files):
 
         try:
@@ -33,16 +134,75 @@ class Forensic_tool:
                             ]
 
         #Build information by cookie
-        for cookie in cookies:
-            domain = cookie.get("domain", "")
-            name = cookie.get("name", "")
-            secure = cookie.get("secure", False)
-            http_only = cookie.get("httpOnly", False)
-            same_site = cookie.get("sameSite", "None")
-            expiry = cookie.get("expirationDate", None)
+        for raw_cookie in cookies:
+            #Cook the cookie
+            cookie = self.normalize_cookie(raw_cookie)
+            #Expected content below
+            domain = cookie["domain"]
+            name = cookie["name"]
+            secure = cookie["secure"]
+            http_only = cookie["http_only"]
+            same_site = cookie["same_site"]
+            expiry = cookie["expiry"]
+            host_only = cookie["host_only"]
 
             parse_domain = urlparse("http://" + domain)
-            root_domain = parse_domain.hostname or domain
+            root_domain = domain.lower()
+
+            if root_domain in self.Tracking_domains:
+                findings["third_party"].append({
+                    "domain": root_domain,
+                    "name": name,
+                    "reason": "Known tracking domain"
+                })
+
+            if root_domain in self.Malicious_domains:
+                findings["suspcious"].append({
+                    "domain": root_domain,
+                    "name": name,
+                    "reason": "Known malicious domain"
+                })
+
+            if root_domain in self.Fingerprinting_domains:
+                findings["suspcious"].append({
+                    "domain": root_domain,
+                    "name": name,
+                    "reason": "Known fingerprinting service"
+                })
+
+            if any(root_domain.endswith(tld) for tld in self.Suspicious_Tlds):
+                findings["suspcious"].append({
+                    "domain": root_domain,
+                    "name": name,
+                    "reason": "Suspicious top-level domain"
+                })
+
+            if self.is_session_cookie(name):
+                issues = []
+
+                if not secure:
+                    issues.appednd("Session cookie missing Secure flag (Sent via HTTP)")
+                if not http_only:
+                    issues.append("Session cookie missing HttpOnly flag (accessible via JavaScript)")
+                if same_site.lower() == "none":
+                    issues.append("Session cookie allowed in cross-site requets")
+
+                if issues:
+                    findings["suspcious"].append({
+                        "domain": root_domain,
+                        "name": name,
+                        "issues": issues,
+                        "reason": "Session hijacking risk"
+                    })
+            auth_keywords = ["auth", "token", "jwt", "c_user", "xs", "sapisd", "ssid", "hsid"]
+            if any(k in name.lower() for k in auth_keywords):
+                if self.is_session_long_lived(expiry):
+                    findings["suspcious"].append({
+                        "domain": root_domain,
+                        "name": name,
+                        "issues": ["Suspiciously long lived auth cookie"],
+                        "reason": "Persistent login token"
+                    })
 
             #Find Third party cookies
             if cookie.get("hostOnly") is False:

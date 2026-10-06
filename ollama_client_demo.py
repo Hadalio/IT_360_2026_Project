@@ -53,38 +53,38 @@ class Ollamaclient:
     ##############################################################
 
     def chat(self, message: str, temperature: float = 0.2) -> str:
-        endpoint_url = f"{self.url}/api/chat/completions"
+        endpoint_url = f"{self.url}/api/v1/chat/completions"
 
-        #Add the message to history 
+        # Add the message to history
         self.history.append({"role": "user", "content": message})
 
         data = {
-            "model" : self.model,
-            "messages": self.history, 
-            "temperature" : temperature
+        "model": self.model,
+        "messages": self.history,
+        "temperature": temperature
         }
 
         try:
             response = requests.post(
-                endpoint_url,
-                headers = self._headers(), 
-                json = data, 
-                timeout = self.timeout
+            endpoint_url,
+            headers=self._headers(),
+            json=data,
+            timeout=self.timeout
             )
             response.raise_for_status()
             payload = response.json()
 
             reply = payload["choices"][0]["message"]["content"]
 
-            #Use the assistant for reply
+            # Save assistant reply
             self.history.append({"role": "assistant", "content": reply})
-
-            #Save the new updated history
             self._save_history()
 
-            return reply 
+            return reply
+
         except requests.exceptions.RequestException as e:
-            raise RuntimeError(f"Ollama API request failed: {e}")     #show me the error!
+            raise RuntimeError(f"Ollama API request failed: {e}")
+
         
     #Resets the chat history 
     def reset(self):

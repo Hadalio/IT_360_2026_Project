@@ -3,7 +3,6 @@
 # Project: Cookiescope
 # Authors: Jake Cirks, Ryan Kotrba, Xander Beachy
 ###################################################
-#The following is a code sample from citied source one. 
 import json
 import os 
 from forensic_tool import Forensic_tool
