@@ -1,11 +1,11 @@
 import json
-import subprocess
-from Evtx.Evtx import Evtx
-from Evtx.Views import evtx_file_xml_view
+from datetime import datetime
 from urllib.parse import urlparse
-class Forensic_tool:
 
-    # OSINT Domain Lists
+
+class CookieScope:
+
+    # OSINT Domain Lists | Can be modified as needed to include +/- domain names
     Tracking_domains = {
         "doubleclick.net",
         "google-analytics.com",
@@ -39,31 +39,49 @@ class Forensic_tool:
 
 
     #Build functions
+    #Load cookies from json file
+    #Function can be deleted once cookie extraction from dbs has been completed
+    def load_cookies(self, cookie_file):
 
+        #Open the cookie file 
+        with open(cookie_file, "r") as f:
+
+            #Return its data 
+            return json.load(f)
+        
+    #Determine if the cookie session is long lived 
     def is_session_long_lived(self, expiry):
+
+        #Validate there is expiration
         if not expiry:
             return False 
 
-        try: #Convert to int
+        #Convert to int
+        try: 
             expiry = int(expiry)
-        except:
+        except: 
             return False
 
         sus_time = 13253760000000000
 
         return expiry > sus_time
 
+    #Identify session cookies based on keywords
     def is_session_cookie(self,name):
+        #Normalize all names 
         name = name.lower()
+        #Looking for any of these keywords
         session_keywords =["session", "sid", "sessid", "phpsessid", "jsessionid", "auth", "token"]
+        #Return any keyword found 
         return any(s in name for s in session_keywords)
 
-    
-    def normalize_cookie(self, cookie):
+    #Create a normal looking data set from the raw cookie data - requires a cookie and the browser (optional browser)
+    def normalize_cookie(self, cookie, browser = "unknown"):
         return {
-            "domain": cookie.get("domain") or cookie.get("host_key") or cookie.get("host") or "",
+            "browser": browser,
+            "domain": cookie.get("domain", ""),
             "name": cookie.get("name", ""),
-            "value": cookie.get("value") or cookie.get("encrypted_value") or "",
+            "value": cookie.get("value"),
             "path": cookie.get("path", "/"),
 
             # Security flags
@@ -105,21 +123,10 @@ class Forensic_tool:
             )
         }
 
+    
+    def analyze_cookies(self, cookies):
 
-    def analyze_cookies(self, cookie_files):
-
-        try:
-            with open(cookie_files, "r") as f:
-                cookies = json.load(f)
-        except Exception as e:
-            return {
-            "error": f"Failed to load cookie file: {e}",
-            "total_cookies": 0,
-            "third_party": [],
-            "suspcious": [],
-            "flags": []
-        }
-
+        
         findings = {
             "total_cookies": len(cookies),
             "third_party": [],
@@ -145,7 +152,6 @@ class Forensic_tool:
             same_site = cookie["same_site"]
             expiry = cookie["expiry"]
             host_only = cookie["host_only"]
-
             parse_domain = urlparse("http://" + domain)
             root_domain = domain.lower()
 
@@ -181,7 +187,7 @@ class Forensic_tool:
                 issues = []
 
                 if not secure:
-                    issues.appednd("Session cookie missing Secure flag (Sent via HTTP)")
+                    issues.append("Session cookie missing Secure flag (Sent via HTTP)")
                 if not http_only:
                     issues.append("Session cookie missing HttpOnly flag (accessible via JavaScript)")
                 if same_site.lower() == "none":
@@ -241,176 +247,187 @@ class Forensic_tool:
 
         return findings 
 
-    def analyze_logs(self, log_file):
-        #Come back to parse logs
-        findings = {
-            "processes": [],
-            "modules": [],
-            "flags": []
-        }
+    def build_cookie_timeline(self,cookies):
+        timeline = []
 
-        if log_file.lower().endswith(".evtx"):
-            try:
-                with Evtx(log_file) as evtx:
-                    for xml, record in evtx_file_xml_view(evtx):
-                        event_data = self.parse_evtx_event(xml)
-                        if event_data:
-                            findings["events"].append(event_data)
-
-
-                            if self.is_suspicious_event(event_data):
-                                findings["suspicious"].append(event_data)
-            except Exception as e:
-                findings["flags"].append(f"Failed to parse EVTX: {e}")
-                return findings 
-        else:
-            try:
-                with open(log_file, "r", errors="ignore") as f:
-                    for line in f:
-                        event_data = self.parse_plaintext_log(line)
-                        if event_data:
-                            findings["events"].append(event_data)
-                            if self.is_suspicious_event(event_data):
-                                findings["events"].append(event_data)
-
-            except Exception as e:
-                findings["flags"].append(f"Failed to parse plaintext log: {e}")
-                return findings 
-        if len(findings["suspicious"]) > 0:
-            findings["flags"].append("Suspicous log events detected")
-
-        if len(findings["events"]) < 10:
-            findings["flags"].append("Unusually small number of log events")
-
-        return findings 
-    def parse_evtx_event(self, xml):
-        try:
-            event_id = self._extract_between(xml, "<EventID>", "</EventID>")
-            timestamp = self._extract_between(xml, "<TimeCreated SystemTime=\"", "\"/>")
-            provider = self._extract_between(xml, "<Provider Name=\"", "\"")
-
-            return {
-                "event_id": event_id,
-                "timestamp": timestamp,
-                "provider": provider,
-                "raw": xml[:200]   # Store only the first 200 characters
-            }
-        except:
-            return None
-    def parse_plaintext_log(self, line):
-        line = line.strip()
-        if not line:
-            return None
-
-        return {
-            "event_id": "text",
-            "timestamp": None,
-            "provider": "plaintext",
-            "raw": line
-
-        }
-
-    def is_suspicious_event(self, event):
-        suspicious_ids = [
-            "4625", #Failed logon
-            "4720", #user account created
-            "1102", # audit logs cleared
-            "4688", #new process created
-            "4697", #service installed
-            "7045", #service created
-        ]
-
-        raw = event.get("raw", "").lower()
-
-        if event.get("event_id") in suspicious_ids:
-            return True
-
-        suspicious_keywords = [
-            "failed", "error", "unauthorized",
-            "malware", "attack", "breach",
-            "cmd.exe", "powershell.exe"
-        ]
-
-        if any(keyword in raw for keyword in suspicious_keywords):
-            return True
-        return False
-
-    def _extract_between(self, text, start, end):
-        try:
-            return text.split(start)[1].split(end)[0]
-        except:
-            return None
-
-    def analyze_memory(self, memory):
-        """
-        Runs Volatility 3 against a memory dump and extracts high value artifacts.
-        Returns structured findings compatible for report generation
-        """
-        findings = {
-            "processes": [],
-            "suspicious": [],
-            "flags": []
-        }
-
-        try:
-            #Run Volatility pslist
-            result = subprocess.run(
-                ["vol", "-f", memory, "windows.pslist"],
-                capture_output=True,
-                text=True
+        #Get the cookie data from cookie for each cookie
+        for cookie in cookies:
+            domain = cookie.get("domain", "")
+            browser = cookie.get("browser", "Unknown")
+            timestamp = (
+                cookie.get("creationDate")
+                or cookie.get("creation_time")
+                or cookie.get("creation_utc")
             )
-
-            if result.returncode != 0:
-                findings["flags"].append("Volatility failed to run")
-                findings["flags"].append(result.stderr.strip())
-                return findings
-
-            output = result.stdout.splitlines()
-        except Exception as e:
-            findings["flags"].append(f"Error running Volatility: {e}")
-            return findings
-
-        #Parse pslist output
-        for line in output:
-            #SKip headers
-            if "PID" in line or "Offset" in line:
+            #If there is no timestamp
+            if not timestamp:
                 continue
-            parts = line.split()
-            if len(parts) < 3:
-                continue
-
+            #
             try:
-                pid = parts[1]
-                process_name = parts[-1]
-            except:
+                date_time = datetime.fromtimestamp(float(timestamp))
+
+                timeline.append({
+                    "timestamp": date_time.strftime("%Y-%m-%d %H:%M:%S"),
+                    "browser": browser,
+                    "domain": domain,
+                    "event": "Cookie Generated"
+
+                })
+            except Exception:
                 continue
 
-            findings["processes"].append({
-                "pid": pid,
-                "name": process_name
-            })
+            #Organize the timeline for chronological order
+            timeline.sort(key=lambda x: x["timestamp"])
 
-            #Detect suspicious processes
-            suspicious_names = ["mimikatz.exe", "cmd.exe", "powershell.exe",
-                                "nc.exe", "netcat", "svch0st.exe", "unknown.exe"
-            ]
+        return timeline
 
-            if process_name.lower() in suspicious_names:
-                findings["suspicious"].append({
-                    "pid": pid,
-                    "name": process_name
+    #Rip open session cookies for metadata analysis
+    def analyze_session_cookies(self, cookies):
+
+        #Build a few lists to store findings
+        findings = {
+            "active_sessions": [],
+            "insecure_sessions": [],
+            "long_lived_sessions": []
+        }
+
+        #Preset a list of keywords for matching
+        keywords = [
+            "sid",
+            "ssid",
+            "auth",
+            "token",
+            "session",
+            "phpsessid",
+            "token"
+        ]
+
+        #Comb through the cookies 
+        for cookie in cookies:
+
+            #Normalize all cookie names
+            name = cookie.get("name", "").lower()
+
+            #Find any names that match to keywords
+            if any(n in name for n in keywords):
+
+                #Add findings to list(s) 
+                findings["active_sessions"].append({
+                    "domain": cookie.get("domain"),
+                    "cookie": cookie.get("name")
                 })
-        if len(findings["suspicious"]) > 0:
-            findings["flags"].append("Suspicious processes detected")
 
-        if len(findings["processes"]) < 5:
-            findings["flags"].append("Unusually small process list (possible corruption)")
+                #If the cookie is insecure (determined on if missing either "secure" or "http_only")
+                if(not cookie.get("secure") or not cookie.get("http_only")):
 
+                    #Add findings to list(s)
+                    findings["insecure_sessions"].append({
+                        "domain": cookie.get("domain"),
+                        "cookie": cookie.get("name")
+                    })
+
+                #Retrieve the cookies expiration 
+                expiration = cookie.get("expiry")
+
+                #Is the cookie long lived?
+                if self.is_session_long_lived(expiration):
+
+                    # If so add findings to list(s)
+                    findings["long_lived_sessions"].append({
+                        "domain": cookie.get("domain"),
+                        "cookie": cookie.get("name")
+                    })
+
+        #Give back the findings
         return findings
+    #Identify correlations between cookies across browsers
+    def match_cookies_to_browsers(self, cookies):
 
-    def run_all_modules(self, cookie_file, log_file, memory_file):
+        #Build dictionary for domains discovered to match with browsers
+        domains = {}
+
+        #Comb through cookies
+        for cookie in cookies:
+
+            #define the domain
+            domain = cookie.get("domain")
+
+            #define the brower
+            browser = cookie.get("browser")
+
+            #Dont break my code pass an empty domain
+            if not domain:
+                continue
+
+            #if the found domain is not in the list
+            if domain not in domains:
+
+                #set its value to whatever set() does | read later
+                domains[domain] = set()
+
+            #Add the found data
+            domains[domain].add(browser)
+
+        #Outside for Loop
+        #Build a dictionary for correlation between browsers and domains+
+        correlations = {}
+
+        #loop through the domains that are found across browsers
+        for domain, browsers in domains.items():
+
+            #Check list contains data | must contain more than 1 item
+            if len(browsers) > 1:
+                correlations[domain] = list(browsers)
+
+        return correlations
+
+    #Provide information about cookie count per browser
+    def browser_stats(self, cookies):
+
+        #Build a dictionary to hold stats for each browser
+        stats = {}
+
+        #Comb through cookies
+        for cookie in cookies:
+
+            #Get easch cookies browser
+            browser = cookie.get("browser", "Unknown")
+
+            #Add the cookie count for each browser
+            stats[browser] = (stats.get(browser, 0) + 1)
+
+        #Return the stats
+        return stats
+
+    #Load and run all functions and returned in format
+    #Change cookie_file to cookies once extractor from dbs works
+    def run_all_modules(self, cookie_file):
+
+        #Load the cookie file and create cookies variable
+        #Remove function once extractor works and let cookies be passed to function calls below
+        #analyze_cookies "starts" the process (there is no neccessary order)
+        cookies = self.load_cookies(cookie_file)
+
+        #Create variable to hold analyzed cookies
+        cookie_findings = self.analyze_cookies(cookies)
+
+        #Create variable to hold cookie timeline
+        timeline = self.build_cookie_timeline(cookies)
+
+        #Create variable to hold cookie session information
+        session = self.analyze_session_cookies(cookies)
+
+        #Create variable to hold correlation information
+        correlations = self.match_cookies_to_browsers(cookies)
+
+        #Create variable to hold browser stats information
+        stats = self.browser_stats(cookies)
+
+        #Return the module information
         return {
-            "cookies": self.analyze_cookies(cookie_file),
-            "memory": self.analyze_memory(memory_file),
-            "log": self.analyze_logs(log_file)
+            "cookies": cookie_findings,
+            "timeline": timeline,
+            "sessions": session,
+            "correlations": correlations,
+            "stats": stats
         }
