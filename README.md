@@ -18,6 +18,7 @@ Cookiescope is a Python-based digital forensics toolkit that analyzes browser co
 - **Memory analysis:** runs Volatility 3 (`windows.pslist`) against a memory dump and flags suspicious processes such as `mimikatz.exe`, `cmd.exe`, `powershell.exe`, and `nc.exe`.
 - **Report builder:** aggregates findings and flags from all modules into a single report.
 - **AI analysis:** sends a forensic prompt to an Ollama server (default model `llama3.3:latest`) to produce a timeline, session analysis, suspicious-domain reasoning, cross-browser correlation, and a final report.
+- **GUI:** a standalone HTML page for loading cookie exports, viewing the report, and generating the AI prompt (see [GUI](#gui)).
 
 ## Project Structure
 
@@ -30,6 +31,8 @@ Cookiescope is a Python-based digital forensics toolkit that analyzes browser co
 
 
 ## Requirements
+
+The GUI has no requirements beyond a modern web browser.
 
 - Python 3.9+
 - [Volatility 3](https://github.com/volatilityfoundation/volatility3), with the `vol` command available on your `PATH`
@@ -81,6 +84,10 @@ The program will:
 3. Send a forensic analysis prompt to the LLM and print its response.
 
 Chat history is saved to `history.json`. Use `Ollamaclient.reset()` to clear it or `trim_history()` to keep it small.
+
+## GUI
+
+`cookiescope.html` is a single self-contained file. It needs no server, install, or internet connection. Open it by double-clicking the file or dragging it into a browser.
 
 ## Sources
 
