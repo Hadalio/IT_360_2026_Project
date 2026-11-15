@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cookiescope</title>
+<style>
+:root{--bg:#ebe7df;--card:#f3f0e9;--text:#23201b;--muted:#6a645a;--line:#cdc6b8;--accent:#2f4a3f;--accent-t:#f3f0e9;--bad:#8f2d1c;--warn:#7a5a12;--ok:#3d5a2a;--code:#e2ddd2;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1a1815;--card:#221f1b;--text:#e4ded2;--muted:#a39b8d;--line:#3a352e;--accent:#a9bfa4;--accent-t:#1a1815;--bad:#d98b78;--warn:#cfae63;--ok:#9db88a;--code:#151310}}
+:root[data-theme="dark"]{--bg:#1a1815;--card:#221f1b;--text:#e4ded2;--muted:#a39b8d;--line:#3a352e;--accent:#a9bfa4;--accent-t:#1a1815;--bad:#d98b78;--warn:#cfae63;--ok:#9db88a;--code:#151310}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:1000px;margin:0 auto;padding:20px 16px 48px}
+header h1,.card h2{font-family:Charter,"Iowan Old Style",Georgia,serif;font-weight:700}
+header h1{margin:0;font-size:28px}
+header p{margin:2px 0 16px;color:var(--muted)}
+nav{display:flex;gap:6px;border-bottom:1px solid var(--line);margin-bottom:18px;overflow-x:auto}
+nav button{background:none;border:0;border-bottom:3px solid transparent;color:var(--muted);padding:10px 14px;font:inherit;font-weight:600;cursor:pointer;white-space:nowrap}
+nav button.on{color:var(--text);border-color:var(--accent)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:0;padding:16px;margin-bottom:16px}
+.card h2{margin:0 0 4px;font-size:17px}
+.card p.h{margin:0 0 12px;color:var(--muted);font-size:13.5px}
+.drop{border:2px dashed var(--line);border-radius:0;padding:22px;text-align:center;color:var(--muted);cursor:pointer}
+.drop.over{border-color:var(--accent);color:var(--text)}
+textarea{width:100%;min-height:110px;background:var(--code);color:var(--text);border:1px solid var(--line);border-radius:0;padding:10px;font:12.5px/1.45 ui-monospace,Menlo,Consolas,monospace;resize:vertical}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+button.btn{background:var(--accent);color:var(--accent-t);border:0;border-radius:0;padding:9px 16px;font:inherit;font-weight:600;cursor:pointer}
+button.btn.sec{background:transparent;color:var(--text);border:1px solid var(--line)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.sum{max-width:420px}
+.sum td:last-child{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--warn);color:var(--warn);padding:2px 9px;font-size:13px;font-weight:600}
+.chip.ok{border-color:var(--ok);color:var(--ok)}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600}
+.tag{display:inline-block;background:var(--code);border-radius:0;padding:1px 7px;margin:1px 3px 1px 0;font-size:12px}
+.tag.bad{color:var(--bad)}
+pre{background:var(--code);border-radius:0;padding:10px;overflow:auto;max-height:280px;font-size:12px;margin:8px 0 0}
+.note{color:var(--muted);font-size:13px}
+.empty{color:var(--muted);text-align:center;padding:30px 0}
+input[type=search]{background:var(--code);color:var(--text);border:1px solid var(--line);border-radius:0;padding:7px 10px;font:inherit;width:100%;max-width:280px}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>Cookiescope</h1>
+  <p>Cookie, log and memory forensics report viewer. IT-360 SIEM &amp; Digital Forensics.</p>
+</header>
+
+<nav id="tabs">
+  <button data-t="evidence" class="on">Evidence</button>
+  <button data-t="report">Report</button>
+  <button data-t="ai">AI Prompt</button>
+</nav>
+
+<section id="evidence">
+  <div class="card">
+    <h2>1. Cookies</h2>
+    <p class="h">Upload an exported cookie JSON (Chrome, Edge or Firefox export). It is analyzed locally in your browser; nothing is uploaded.</p>
+    <div class="drop" id="drop">Drop <b>cookies.json</b> here or click to choose<input id="file" type="file" accept=".json,application/json" hidden></div>
+    <p class="note" id="fileinfo" style="margin:8px 0 0">No file loaded.</p>
+    <textarea id="cookieText" placeholder="…or paste cookie JSON here" style="margin-top:10px"></textarea>
+  </div>
+  <div class="card">
+    <h2>2. Logs &amp; memory (optional)</h2>
+    <p class="h">A browser can't parse .evtx files or run Volatility. Run <code>main.py</code> and paste the JSON of <code>log_results</code> and <code>memory_results</code> here (<code>print(json.dumps(...))</code>) to include them in the report.</p>
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr))">
+      <div><label class="note">Log results JSON</label><textarea id="logText" placeholder='{"events":[],"suspicious":[],"flags":[]}'></textarea></div>
+      <div><label class="note">Memory results JSON</label><textarea id="memText" placeholder='{"processes":[],"suspicious":[],"flags":[]}'></textarea></div>
+    </div>
+  </div>
+  <div class="row" style="margin-top:0">
+    <button class="btn" id="run">Analyze</button>
+    <button class="btn sec" id="sample">Load sample data</button>
+    <button class="btn sec" id="clear">Clear</button>
+  </div>
+  <p class="note" id="err" style="color:var(--bad)"></p>
+</section>
+
+<section id="report" hidden>
+  <div id="reportBody"><div class="empty">Run an analysis on the Evidence tab first.</div></div>
+</section>
+
+<section id="ai" hidden>
+  <div class="card">
+    <h2>Forensic analysis prompt</h2>
+    <p class="h">The same prompt <code>main.py</code> sends to Ollama, with the cookie data filled in. Copy it into your Ollama / Open WebUI chat, or use it as the prompt in <code>main.py</code>. Published pages can't call your Ollama server directly.</p>
+    <textarea id="prompt" style="min-height:320px" readonly></textarea>
+    <div class="row">
+      <button class="btn" id="copy">Copy prompt</button>
+      <button class="btn sec" id="dl">Download report JSON</button>
+    </div>
+  </div>
+</section>
+</main>
+
+<script>
+const TRACK=["doubleclick.net","google-analytics.com","adservice.google.com","facebook.net","scorecardsearch.com","quantserve.com","ads.yahoo.com","adnxs.com","rubiconproject.com"];
+const MAL=["evil-malware-site.biz","steal-session.ru","phish-login.cn","malicious-update.net","trojan-dropper.org"];
+const FP=["fingerprintjs.com","browserleaks.com","deviceinfo.me"];
+const TLDS=[".ru",".cn",".biz",".info",".top",".xyz"];
+const KW=["track","ads","analytics","doubleclick","telemetry","beacon","spy","malware"];
+const SESS=["session","sid","sessid","phpsessid","jsessionid","auth","token"];
+const AUTH=["auth","token","jwt","c_user","xs","sapisd","ssid","hsid"];
+const PROMPT=`You are a digital forensics analysis engine. Using the cookie data I provide,
+generate structured forensic outputs and a final written report.
+COOKIE DATA (IN JSON):
+__DATA__
+
+Perform the following tasks:
+
+1. Activity Timeline Reconstruction
+- Convert all cookie timestamps to human-readable format.
+- Reconstruct user activity chronologically based on creation, last access, and expiration times.
+- Identify meaningful behavioral patterns (logins, repeated visits, suspicious timing, anomalies).
+
+2. Session Cookie Identification
+- Detect cookies that represent authenticated sessions (e.g., sessionid, auth tokens, JWTs).
+- Flag insecure session attributes (missing HttpOnly, Secure, SameSite).
+- Highlight long-lived or high-risk session cookies.
+
+3. Suspicious Domain Flagging
+- Identify third-party tracking domains.
+- Flag domains associated with malware, C2 infrastructure, or known abuse lists.
+- Provide reasoning for each flagged domain.
+
+4. Cross-Browser Correlation
+- Compare cookies across Chrome, Edge, Firefox, etc.
+- Identify shared domains, identifiers, or patterns.
+- Highlight evidence of multi-browser usage or anti-forensic behavior.
+
+5. Final Forensic Report
+- Produce a structured, professional forensic report with sections: Executive Summary, Evidence Overview, Timeline Analysis, Session Analysis, Suspicious Domains, Cross-Browser Correlation, Key Findings & Recommendations.
+- Use clear headings, bullet points, and investigator-friendly formatting.
+
+Output: Provide all analyses and the final report in one response.`;
+const SAMPLE=[
+{domain:".doubleclick.net",name:"IDE",value:"abc",path:"/",secure:true,httpOnly:false,sameSite:"no_restriction",expirationDate:1893456000,hostOnly:false},
+{domain:"example.com",name:"sessionid",value:"s3cr3t",path:"/",secure:false,httpOnly:false,sameSite:"none",expirationDate:1700000000,hostOnly:true},
+{domain:"steal-session.ru",name:"auth_token",value:"zzz",path:"/",secure:false,httpOnly:true,sameSite:"lax",expirationDate:2000000000,hostOnly:true},
+{domain:"bank.example.org",name:"PHPSESSID",value:"q1",path:"/",secure:true,httpOnly:true,sameSite:"strict",hostOnly:true},
+{domain:"fingerprintjs.com",name:"_fpjs",value:"1",path:"/",secure:true,httpOnly:true,sameSite:"lax",expirationDate:1800000000,hostOnly:false}];
+
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let REPORT=null;
+
+function pick(o,keys,def){for(const k of keys){if(o[k]!==undefined&&o[k]!==null&&o[k]!=="")return o[k]}return def}
+function normalize(c){
+  return{domain:pick(c,["domain","host_key","host"],""),name:c.name||"",path:c.path||"/",
+   secure:!!pick(c,["secure","isSecure","Secure"],false),
+   http_only:!!pick(c,["httpOnly","httponly","HttpOnly"],false),
+   same_site:String(pick(c,["sameSite","samesite","SameSite"],"None")),
+   expiry:pick(c,["expirationDate","expires_utc","expiry"],null),
+   host_only:pick(c,["hostOnly","host_only","HostOnly"],true)};
+}
+function longLived(exp){
+  const n=Number(exp);if(!n)return false;
+  if(n>1e15)return n>13253760000000000; // Chrome µs since 1601
+  return n>Date.now()/1000+365*86400;   // Unix seconds, > 1 year out
+}
+function domMatch(d,list){return list.some(x=>d===x||d.endsWith("."+x))}
+function analyzeCookies(cookies){
+  const f={total_cookies:cookies.length,third_party:[],suspicious:[],flags:[]};
+  for(const raw of cookies){
+    const c=normalize(raw),d=c.domain.toLowerCase().replace(/^\./,""),n=c.name,ln=n.toLowerCase();
+    const add=(list,reason,issues)=>f[list].push({domain:d,name:n,reason,issues:issues||[]});
+    if(domMatch(d,TRACK))add("third_party","Known tracking domain");
+    if(domMatch(d,MAL))add("suspicious","Known malicious domain");
+    if(domMatch(d,FP))add("suspicious","Known fingerprinting service");
+    if(TLDS.some(t=>d.endsWith(t)))add("suspicious","Suspicious top-level domain");
+    if(SESS.some(s=>ln.includes(s))){
+      const i=[];
+      if(!c.secure)i.push("Missing Secure flag (sent over HTTP)");
+      if(!c.http_only)i.push("Missing HttpOnly flag (readable by JavaScript)");
+      if(c.same_site.toLowerCase()==="none"||c.same_site.toLowerCase()==="no_restriction")i.push("SameSite=None (cross-site requests allowed)");
+      if(i.length)add("suspicious","Session hijacking risk",i);
+    }
+    if(AUTH.some(k=>ln.includes(k))&&longLived(c.expiry))add("suspicious","Persistent login token",["Suspiciously long-lived auth cookie"]);
+    if(c.host_only===false&&!domMatch(d,TRACK))add("third_party","Domain-wide (non host-only) cookie");
+    if(KW.some(k=>d.includes(k)))add("suspicious","Suspicious keyword in domain");
+    const ins=[];
+    if(!c.secure)ins.push("Missing Secure");
+    if(!c.http_only)ins.push("Missing HttpOnly");
+    if(["none","no_restriction"].includes(c.same_site.toLowerCase()))ins.push("SameSite=None");
+    if(ins.length)add("suspicious","Insecure cookie attributes",ins);
+  }
+  if(f.suspicious.length)f.flags.push("Suspicious cookies detected");
+  if(f.third_party.length>20)f.flags.push("High number of third-party cookies");
+  return f;
+}
+function tryJSON(txt,label){
+  if(!txt.trim())return null;
+  try{return JSON.parse(txt)}catch(e){throw new Error(label+" is not valid JSON: "+e.message)}
+}
+function run(){
+  $("err").textContent="";
+  try{
+    let cookies=tryJSON($("cookieText").value,"Cookie data");
+    if(!cookies)throw new Error("Load or paste cookie JSON first.");
+    if(!Array.isArray(cookies))cookies=cookies.cookies||[cookies];
+    const results={cookies:analyzeCookies(cookies)};
+    const log=tryJSON($("logText").value,"Log results");
+    const mem=tryJSON($("memText").value,"Memory results");
+    if(log)results.logs=log;
+    if(mem)results.memory=mem;
+    const flags=[];
+    Object.values(results).forEach(s=>{if(s&&s.flags)flags.push(...s.flags)});
+    REPORT={summary:"Automated Forensic Analysis Completed",findings:results,flags};
+    render();
+    $("prompt").value=PROMPT.replace("__DATA__",JSON.stringify(results.cookies,null,2));
+    show("report");
+  }catch(e){$("err").textContent=e.message}
+}
+function table(rows,withIssues){
+  if(!rows.length)return'<div class="note">None found.</div>';
+  return`<div class="scroll"><table><thead><tr><th>Domain</th><th>Cookie</th><th>Reason</th>${withIssues?"<th>Issues</th>":""}</tr></thead><tbody>${
+   rows.map(r=>`<tr><td>${esc(r.domain)}</td><td>${esc(r.name)}</td><td>${esc(r.reason)}</td>${withIssues?`<td>${(r.issues||[]).map(i=>`<span class="tag bad">${esc(i)}</span>`).join("")}</td>`:""}</tr>`).join("")}</tbody></table></div>`;
+}
+function render(){
+  const f=REPORT.findings,c=f.cookies;
+  const sess=c.suspicious.filter(r=>r.reason==="Session hijacking risk").length;
+  const mal=c.suspicious.filter(r=>/malicious|fingerprint|top-level/i.test(r.reason)).length;
+  let h=`<div class="card"><h2>${esc(REPORT.summary)}</h2>
+   <div class="chips" style="margin:10px 0">${REPORT.flags.length?[...new Set(REPORT.flags)].map(x=>`<span class="chip">${esc(x)}</span>`).join(""):'<span class="chip ok">No flags raised</span>'}</div>
+   <table class="sum"><tbody><tr><td>Cookies analyzed</td><td>${c.total_cookies}</td></tr>
+   <tr><td>Third-party / tracking</td><td>${c.third_party.length}</td></tr>
+   <tr><td>Suspicious findings</td><td>${c.suspicious.length}</td></tr>
+   <tr><td>Session-hijack risks</td><td>${sess}</td></tr>
+   <tr><td>Bad domains / TLDs</td><td>${mal}</td></tr></tbody></table></div>
+   <div class="card"><h2>Cookie findings: suspicious</h2><p class="h"><input type="search" id="q" placeholder="Filter by domain, cookie or reason"></p><div id="susp">${table(c.suspicious,true)}</div></div>
+   <div class="card"><h2>Cookie findings: third-party</h2>${table(c.third_party,false)}</div>`;
+  if(f.logs)h+=sectionCard("Log findings",f.logs);
+  if(f.memory)h+=sectionCard("Memory findings",f.memory);
+  $("reportBody").innerHTML=h;
+  $("q").addEventListener("input",e=>{
+    const v=e.target.value.toLowerCase();
+    $("susp").innerHTML=table(c.suspicious.filter(r=>JSON.stringify(r).toLowerCase().includes(v)),true);
+  });
+}
+function sectionCard(title,s){
+  const counts=Object.entries(s).filter(([,v])=>Array.isArray(v)).map(([k,v])=>`<span class="tag">${esc(k)}: ${v.length}</span>`).join("");
+  const fl=(s.flags||[]).map(x=>`<span class="chip">${esc(x)}</span>`).join("");
+  return`<div class="card"><h2>${title}</h2><div class="chips" style="margin:8px 0">${fl||'<span class="chip ok">No flags</span>'}</div>${counts}<pre>${esc(JSON.stringify(s,null,2))}</pre></div>`;
+}
+function show(t){
+  ["evidence","report","ai"].forEach(id=>$(id).hidden=id!==t);
+  document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.t===t));
+}
+function readFile(file){
+  const r=new FileReader();
+  r.onload=()=>{$("cookieText").value=r.result;$("fileinfo").textContent=file.name+" ("+Math.round(file.size/1024*10)/10+" KB) loaded."};
+  r.readAsText(file);
+}
+document.querySelectorAll("#tabs button").forEach(b=>b.onclick=()=>show(b.dataset.t));
+$("drop").onclick=()=>$("file").click();
+$("file").onchange=e=>e.target.files[0]&&readFile(e.target.files[0]);
+$("drop").ondragover=e=>{e.preventDefault();$("drop").classList.add("over")};
+$("drop").ondragleave=()=>$("drop").classList.remove("over");
+$("drop").ondrop=e=>{e.preventDefault();$("drop").classList.remove("over");e.dataTransfer.files[0]&&readFile(e.dataTransfer.files[0])};
+$("run").onclick=run;
+$("sample").onclick=()=>{$("cookieText").value=JSON.stringify(SAMPLE,null,2);$("fileinfo").textContent="Sample data loaded."};
+$("clear").onclick=()=>{["cookieText","logText","memText"].forEach(i=>$(i).value="");$("fileinfo").textContent="No file loaded.";$("err").textContent=""};
+$("copy").onclick=async()=>{
+  try{await navigator.clipboard.writeText($("prompt").value)}catch(e){$("prompt").select();document.execCommand("copy")}
+  $("copy").textContent="Copied";setTimeout(()=>$("copy").textContent="Copy prompt",1500);
+};
+$("dl").onclick=()=>{
+  if(!REPORT)return;
+  const a=document.createElement("a");
+  a.href="data:application/json;charset=utf-8,"+encodeURIComponent(JSON.stringify(REPORT,null,2));
+  a.download="cookiescope_report.json";a.click();
+};
+</script>
+</body>
+</html>
