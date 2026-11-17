@@ -1,8 +1,6 @@
 import json
 from datetime import datetime
 from urllib.parse import urlparse
-
-
 class CookieScope:
 
     # OSINT Domain Lists | Can be modified as needed to include +/- domain names
@@ -35,8 +33,6 @@ class CookieScope:
     Suspicious_Tlds = {
         ".ru", ".cn", ".biz", ".info", ".top", ".xyz"
     }
-
-
 
     #Build functions
     #Load cookies from json file
@@ -78,7 +74,7 @@ class CookieScope:
     #Create a normal looking data set from the raw cookie data - requires a cookie and the browser (optional browser)
     def normalize_cookie(self, cookie, browser = "unknown"):
         return {
-            "browser": browser,
+            "browser": cookie.get("browser", browser),
             "domain": cookie.get("domain", ""),
             "name": cookie.get("name", ""),
             "value": cookie.get("value"),
@@ -93,6 +89,7 @@ class CookieScope:
             ),
 
             "http_only": (
+                cookie.get("http_only") or
                 cookie.get("httpOnly") or
                 cookie.get("httponly") or
                 cookie.get("HttpOnly") or
@@ -120,7 +117,11 @@ class CookieScope:
                 cookie.get("host_only") or
                 cookie.get("HostOnly") or
                 True
-            )
+            ),
+
+            "creation_time": cookie.get("creation_time"),
+            "creation_utc": cookie.get("creation_utc"),
+            "last_access": cookie.get("last_access")
         }
 
     
@@ -154,6 +155,7 @@ class CookieScope:
             host_only = cookie["host_only"]
             parse_domain = urlparse("http://" + domain)
             root_domain = domain.lower()
+            root_domain = root_domain.lstrip(".")
 
             if root_domain in self.Tracking_domains:
                 findings["third_party"].append({
@@ -211,7 +213,7 @@ class CookieScope:
                     })
 
             #Find Third party cookies
-            if cookie.get("hostOnly") is False:
+            if cookie.get("host_only") is False:
                 findings["third_party"].append({
                     "domain": root_domain,
                     "name": name
@@ -253,28 +255,21 @@ class CookieScope:
         #Get the cookie data from cookie for each cookie
         for cookie in cookies:
             domain = cookie.get("domain", "")
+
             browser = cookie.get("browser", "Unknown")
-            timestamp = (
-                cookie.get("creationDate")
-                or cookie.get("creation_time")
-                or cookie.get("creation_utc")
-            )
+
+            timestamp = (cookie.get("creation_time"))
             #If there is no timestamp
             if not timestamp:
                 continue
             #
-            try:
-                date_time = datetime.fromtimestamp(float(timestamp))
-
-                timeline.append({
-                    "timestamp": date_time.strftime("%Y-%m-%d %H:%M:%S"),
-                    "browser": browser,
-                    "domain": domain,
-                    "event": "Cookie Generated"
-
+        
+            timeline.append({
+                "timestamp": timestamp,
+                "browser": browser,
+                "domain": domain,
+                "event": "Cookie Generated"
                 })
-            except Exception:
-                continue
 
             #Organize the timeline for chronological order
             timeline.sort(key=lambda x: x["timestamp"])
@@ -399,14 +394,29 @@ class CookieScope:
         #Return the stats
         return stats
 
+    def build_report_findings(self, results):
+        return {
+            "executive_summary": {
+                "total_cookies": results["cookies"]["total_cookies"],
+                "flags": results["cookies"]["flags"]
+            },
+            "suspcious_findings": results["cookies"]["suspcious"][:50],
+            "session_findings": {
+                "active_sessions": len(results["sessions"]["active_sessions"]),
+                "insecure_sessions": len(results["sessions"]["insecure_sessions"]),
+                "long_lived_sessions": len(results["sessions"]["long_lived_sessions"])
+            },
+            "browser_stats": results["stats"],
+            "correlations": list(results["correlations"].items())[:20]
+        }
     #Load and run all functions and returned in format
     #Change cookie_file to cookies once extractor from dbs works
-    def run_all_modules(self, cookie_file):
+    def run_all_modules(self, cookies):
 
         #Load the cookie file and create cookies variable
         #Remove function once extractor works and let cookies be passed to function calls below
         #analyze_cookies "starts" the process (there is no neccessary order)
-        cookies = self.load_cookies(cookie_file)
+        #cookies = self.load_cookies(cookie_file)
 
         #Create variable to hold analyzed cookies
         cookie_findings = self.analyze_cookies(cookies)
